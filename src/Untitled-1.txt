@@ -1,0 +1,211 @@
+// File: src/App.jsx
+import React, { useState, useEffect } from 'react';
+import { saveAs } from 'file-saver';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import './App.css';
+
+function App() {
+  const [entries, setEntries] = useState(() => {
+    const saved = localStorage.getItem('entries');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [expenses, setExpenses] = useState(() => {
+    const saved = localStorage.getItem('expenses');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [mainDate, setMainDate] = useState(() => {
+    const saved = localStorage.getItem('mainDate');
+    return saved || '';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('entries', JSON.stringify(entries));
+    localStorage.setItem('expenses', JSON.stringify(expenses));
+    localStorage.setItem('mainDate', mainDate);
+  }, [entries, expenses, mainDate]);
+
+  const addEntry = (entry) => {
+    setEntries([...entries, { ...entry, date: mainDate }]);
+  };
+
+  const addExpense = (expense) => {
+    setExpenses([...expenses, { ...expense, date: mainDate }]);
+  };
+
+  const totalCylinders = entries.reduce((sum, e) => sum + +e.cylinders, 0);
+  const totalIncome = entries.reduce((sum, e) => sum + (+e.cylinders * +e.price), 0);
+  const totalExpenses = expenses.reduce((sum, e) => sum + +e.amount, 0);
+  const finalBalance = totalIncome - totalExpenses;
+
+  const exportToExcel = () => {
+    const saleSheet = entries.map(e => ({
+      Date: e.date,
+      Cylinders: e.cylinders,
+      Price: e.price,
+      Note: e.note
+    }));
+
+    const expenseSheet = expenses.map(e => ({
+      Date: e.date,
+      'Expense Name': e.name,
+      Amount: e.amount
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws1 = XLSX.utils.json_to_sheet(saleSheet);
+    const ws2 = XLSX.utils.json_to_sheet(expenseSheet);
+
+    XLSX.utils.book_append_sheet(wb, ws1, 'Sales');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Expenses');
+
+    XLSX.writeFile(wb, 'GasAgency_Report.xlsx');
+  };
+
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text('Gas Agency Daily Report', 14, 15);
+    doc.setFontSize(12);
+    doc.text(`Date: ${mainDate}`, 14, 22);
+
+    autoTable(doc, {
+      startY: 30,
+      head: [['Date', 'Cylinders', 'Price', 'Note']],
+      body: entries.map(e => [e.date, e.cylinders, e.price, e.note]),
+      theme: 'striped',
+    });
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 10,
+      head: [['Date', 'Expense Name', 'Amount']],
+      body: expenses.map(e => [e.date, e.name, e.amount]),
+      theme: 'striped',
+    });
+
+    doc.text(`Total Cylinders: ${totalCylinders}`, 14, doc.lastAutoTable.finalY + 20);
+    doc.text(`Total Income: ₹${totalIncome.toFixed(2)}`, 14, doc.lastAutoTable.finalY + 28);
+    doc.text(`Total Expenses: ₹${totalExpenses.toFixed(2)}`, 14, doc.lastAutoTable.finalY + 36);
+    doc.text(`Final Balance: ₹${finalBalance.toFixed(2)}`, 14, doc.lastAutoTable.finalY + 44);
+
+    doc.save('GasAgency_Report.pdf');
+  };
+
+  return (
+    <div className="container">
+      <h1>🛢️ ZENYA GAS AGENCY</h1>
+
+      <div className="main-date">
+        <label>Main Date:</label>
+        <input
+          type="date"
+          value={mainDate}
+          onChange={(e) => setMainDate(e.target.value)}
+          required
+        />
+      </div>
+
+      <div className="forms">
+        <form
+          onSubmit={e => {
+            e.preventDefault();
+            addEntry({
+              cylinders: +e.target.cylinders.value,
+              price: +e.target.price.value,
+              note: e.target.note.value
+            });
+            e.target.reset();
+          }}
+          className="form-box"
+        >
+          <h2>Add Sale Entry</h2>
+          <input name="cylinders" type="number" placeholder="Number of Cylinders" required />
+          <input name="price" type="number" placeholder="Price per Cylinder" required />
+          <input name="note" type="text" placeholder="Note (e.g., PhonePe, Customer)" />
+          <button className="btn blue">Add Entry</button>
+        </form>
+
+        <form
+          onSubmit={e => {
+            e.preventDefault();
+            addExpense({
+              name: e.target.name.value,
+              amount: +e.target.amount.value
+            });
+            e.target.reset();
+          }}
+          className="form-box"
+        >
+          <h2>Add Expense</h2>
+          <input name="name" type="text" placeholder="Expense Name" required />
+          <input name="amount" type="number" placeholder="Amount" required />
+          <button className="btn red">Add Expense</button>
+        </form>
+      </div>
+
+      <div className="summary">
+        <h2>Summary</h2>
+        <p>Total Cylinders: {totalCylinders}</p>
+        <p>Total Income: ₹{totalIncome.toFixed(2)}</p>
+        <p>Total Expenses: ₹{totalExpenses.toFixed(2)}</p>
+        <p className="bold">Final Balance: ₹{finalBalance.toFixed(2)}</p>
+      </div>
+
+      {/* <div className="entry-list">
+        <h2>Sale Entries</h2>
+        <ul>
+          {entries.map((e, i) => (
+            <li key={i}>[{e.date}] - {e.cylinders} cyl @ ₹{e.price} ({e.note})</li>
+          ))}
+        </ul>
+
+        <h2>Expenses</h2>
+        <ul>
+          {expenses.map((e, i) => (
+            <li key={i}>[{e.date}] - {e.name}: ₹{e.amount}</li>
+          ))}
+        </ul>
+      </div> */}
+
+      <div className="entry-list">
+        <h2>Sale Entries</h2>
+        {entries.length > 0 ? (
+          <>
+            <p><strong>Date:</strong> {mainDate}</p>
+            <ul>
+              {entries.map((e, i) => (
+                <li key={i}>
+                  {e.cylinders} cylinders × ₹{e.price} = ₹{e.cylinders * e.price} → {e.note}
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p>No sale entries yet.</p>
+        )}
+
+        <h2>Expenses</h2>
+        {expenses.length > 0 ? (
+          <ul>
+            {expenses.map((e, i) => (
+              <li key={i}>{e.name}: ₹{e.amount}</li>
+            ))}
+          </ul>
+        ) : (
+          <p>No expenses yet.</p>
+        )}
+      </div>
+
+
+      <div className="actions">
+        <button onClick={exportToExcel} className="btn green">Export to Excel</button>
+        <button onClick={exportToPDF} className="btn purple">Export to PDF</button>
+      </div>
+    </div>
+  );
+}
+
+export default App;
